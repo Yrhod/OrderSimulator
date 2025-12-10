@@ -55,6 +55,7 @@ Processor::Processor(const std::string& db_conn_str, const std::string& kafka_br
 void Processor::run() {
     std::cout << "Processor running...\n";
     std::thread crow_thread([this]() { app_.run(); });
+
     
     try {
         while (running_) {
