@@ -1,0 +1,76 @@
+name: CI
+
+on:
+  push:
+    branches: [ "dev" ]
+  pull_request:
+    branches: [ "dev" ]
+
+jobs:
+  build-test:
+    runs-on: ubuntu-latest
+    services:
+      kafka:
+        image: bitnami/kafka:latest
+        ports:
+          - 9093:9093
+        env:
+          KAFKA_CFG_ZOOKEEPER_CONNECT: 'zookeeper:2181'
+          KAFKA_CFG_ADVERTISED_LISTENERS: 'PLAINTEXT://localhost:9093'
+          KAFKA_CFG_LISTENERS: 'PLAINTEXT://0.0.0.0:9093'
+        options: >
+          --health-cmd="kafka-topics.sh --bootstrap-server localhost:9093 --list" --health-interval=10s --health-timeout=5s --health-retries=5
+      zookeeper:
+        image: bitnami/zookeeper:latest
+        ports:
+          - 2181:2181
+      postgres:
+        image: postgres:15
+        ports:
+          - 5432:5432
+        env:
+          POSTGRES_DB: order_test
+          POSTGRES_USER: test
+          POSTGRES_PASSWORD: test
+
+    steps:
+      - name: Checkout repo
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.11'
+      - name: Install Python dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: '1.23.1'
+
+      - name: Install CMake, Ninja, GCC, g++
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y cmake ninja-build g++
+
+      - name: Set up vcpkg
+        run: |
+          git clone https://github.com/microsoft/vcpkg.git
+          ./vcpkg/bootstrap-vcpkg.sh
+          ./vcpkg/vcpkg install crow cppkafka boost
+        shell: bash
+
+      - name: Build C++ components
+        run: |
+          make build
+
+      - name: Run Python tests
+        run: |
+          make test
+
+      - name: Clean
+        run: |
+          make clean
